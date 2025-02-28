@@ -1,18 +1,61 @@
 import React
-    from "react";
+, { useRef, useState } from "react";
 
 import { type Participant } from "../App";
+import { addParticipant, removeParticipant } from "../indexdb/indexdb";
 
 interface FormProps {
     participants: Participant[];
     randomize: any;
+    // addParticipantState: any;
+    fetchParticipants: any;
+    openModal: any;
 }
-const Form: React.FC<FormProps> = ({ participants, randomize }) => {
+const Form: React.FC<FormProps> = ({ participants, randomize, fetchParticipants, openModal }) => {
+
+    const inputRef = useRef(null);
+    const removeDebounceRef = useRef(false);
+
+    const [error, setError] = useState("");
+
+
+
     return (
         <React.Fragment>
-            <div className="flex gap-2 w-full h-50 bg-transparent">
-                <div className="w-full">
-                    <input type="text" id="first_name" className=" border bg-transparent border-gray-300 w-full text-gray-900 text-sm rounded-lg block p-2.5 " placeholder="Enter your name" required />
+            <div className="flex gap-2 w-full items-center bg-transparent justify-center">
+                <div className="flex flex-col w-full max-w-lg h-52 text-center">
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        id="first_name"
+                        className={`w-full bg-transparent text-black text-5xl text-center justify-center align-middle focus:outline-none placeholder-black
+                        ${error ? "text-red-500" : ""}`}
+                        onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault(); // Prevent form submission if inside a form
+                                const name = e.target.value.trim();
+
+                                // ✅ Check if name already exists
+                                if (participants.includes(name)) {
+                                    setError("Names must be unique");
+                                    return;
+                                }
+                                try {
+                                    await addParticipant(name);
+                                    // addParticipantState(name);
+                                    fetchParticipants();
+                                    setError(""); // ✅ Clear error on success
+                                    inputRef.current.value = ""; // ✅ Clear input field
+                                } catch (err) {
+                                    console.error("Error adding participant:", err);
+                                    setError("Names must be unique");
+                                }
+                            }
+                        }}
+                        placeholder="Enter your name"
+                        required
+                    />
+                    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
                 </div>
             </div>
             <div className="flex gap-2">
@@ -49,33 +92,57 @@ const Form: React.FC<FormProps> = ({ participants, randomize }) => {
               </svg>
               Download Attendance
             </button> */}
+
+                    <button className="btn mt-20" onClick={openModal}>
+                        View Winners
+                    </button>
                     <button className="btn mt-20" onClick={randomize}>
                         Randomize
                     </button>
                 </div>
             </div>
 
-            <div className="card bg-opacity-50 bg-white/30 backdrop-blur-md shadow-xl border border-white/20">
+            <div className="card h-[500px] overflow-y-auto bg-opacity-50 bg-white/30 backdrop-blur-md shadow-xl border border-white/20">
                 <div className="card-body overflow-x-auto items-left text-center">
                     <table className="table">
                         {/* head */}
                         <thead>
                             <tr className="text-black/70 text-2xl">
                                 <th></th>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Date</th>
+                                <th>Participants</th>
+                                {/* <th>Email</th>
+                                <th>Date</th> */}
                             </tr>
                         </thead>
                         <tbody>
-                            {participants.map((participant) => (
-                                <tr className="text-black/60 text-xl" key={participant.id}>
-                                    <React.Fragment>
-                                        <th>{participant.id}</th>
-                                        <td>{participant.name}</td>
-                                        <td>{participant.email}</td>
-                                        <td>{participant.created_at}</td>
-                                    </React.Fragment>
+                            {participants.map((participant, index) => (
+                                <tr
+                                    className="text-black/60 text-xl group hover:bg-gray-100 transition duration-200"
+                                    key={`${participant.id}-${participant.name}`}
+                                >
+                                    <th className="px-4 py-2">{participants.length - index}</th>
+                                    <td className="px-4 py-2">{participant.name}</td>
+                                    <td className="px-4 py-2 text-right">
+                                        <button
+                                            onDoubleClick={async () => {
+                                                try {
+
+                                                    if (removeDebounceRef.current) return;
+                                                    removeDebounceRef.current = true;
+                                                    await removeParticipant(participant);
+                                                    fetchParticipants();
+                                                    removeDebounceRef.current = false;
+                                                } catch (err) {
+                                                    console.error("Error removing participant:", err);
+                                                    removeDebounceRef.current = false;
+                                                }
+                                                removeParticipant(participant)
+                                            }}
+                                            className="text-red-500 opacity-0 group-hover:opacity-100 transition duration-200"
+                                        >
+                                            ✕
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

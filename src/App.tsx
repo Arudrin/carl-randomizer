@@ -1,17 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Confetti from "react-confetti";
 import Form from "./components/Form";
 import RandomizerForm from "./components/RandomizerForm";
+import WinnersModal from "./components/WinnersModal.js"
+import { addWinner, getAllParticipants, hideParticipant, removeParticipant } from "./indexdb/indexdb.js"
 
 export type Participant = {
   id: number;
-  uuid: string;
   name: string;
-  email: string;
-  created_at: string;
+
 };
 
 const API_URL = import.meta.env.VITE_API_URL;
+
+
 
 const App: React.FC = () => {
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -21,31 +23,10 @@ const App: React.FC = () => {
   const [confettiVisible, setConfettiVisible] = useState<boolean>(false);
   const [isOnRandomizeMode, setIsOnRandomizeMode] = useState<boolean>(false);
 
-  const fetchParticipants = () => {
-    fetch(`${API_URL}/participants`)
-      .then((res) => res.json())
-      .then((data) => {
-        const mappedResult = data.map((participant: any, index: number) => ({
-          ...participant,
-          id: index + 1,
-          uuid: participant.id,
-          created_at: new Date(participant.created_at).toLocaleString("en-US", {
-            timeZone: "Asia/Manila",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: true,
-          }),
-        }));
-        setParticipants(mappedResult);
-      })
-      .catch((err) => {
-        console.log(err.json());
-      });
-  };
+  const [isModalOpen, setModalOpen] = useState(false);
+  const openModal = () => setModalOpen(true);
+  const closeModal = () => setModalOpen(false);
+
 
   const downloadCSV = () => {
     fetch(`${API_URL}/participants/all`)
@@ -107,7 +88,47 @@ const App: React.FC = () => {
     }
   };
 
+  const addParticipantState = (participant: string) => {
+    setParticipants((prevItems) => [{ name: participant, id: prevItems.length + 1 }, ...prevItems]);
+  };
+
+
+  const fetchParticipants = useCallback(() => {
+    getAllParticipants()
+      .then((data: any) => {
+
+        console.log('data: ', data)
+        let participants;
+        if (data?.length) {
+          participants = data?.length && data.reverse().filter((participant: any, index: number) => (!participant.is_hidden))
+        }
+        setParticipants(participants ?? []);
+      })
+    // .then((data) => {
+    //   const mappedResult = data.map((participant: any, index: number) => ({
+    //     ...participant,
+    //     id: index + 1,
+    //     uuid: participant.id,
+    //     created_at: new Date(participant.created_at).toLocaleString("en-US", {
+    //       timeZone: "Asia/Manila",
+    //       year: "numeric",
+    //       month: "long",
+    //       day: "numeric",
+    //       hour: "2-digit",
+    //       minute: "2-digit",
+    //       second: "2-digit",
+    //       hour12: true,
+    //     }),
+    //   }));
+    //   setParticipants(mappedResult);
+    // })
+    // .catch((err) => {
+    //   console.log(err.json());
+    // });
+  }, []);
+
   useEffect(() => {
+
     fetchParticipants();
   }, []);
 
@@ -133,6 +154,8 @@ const App: React.FC = () => {
         setConfettiVisible(true);
         setIsRandomizing(false);
         setAnimateName(null);
+        handleWinner(selectedWinner);
+
         return;
       }
       setAnimateName(
@@ -141,22 +164,27 @@ const App: React.FC = () => {
     }, interval);
   };
 
+  const handleWinner = async (winner: Participant) => {
+    const hide = await hideParticipant(winner.id)
+    fetchParticipants();
+    const add = await addWinner({
+      ...winner, date: new Date().toLocaleString("en-US", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      })
+    })
+
+  }
+
   useEffect(() => {
     if (winner !== null) {
       console.log("winner", winner);
-      fetch(`${API_URL}/participants`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: winner.uuid,
-          status: 0,
-        }),
-      })
-        .then((response) => response.json())
-        .then((data) => console.log(data))
-        .catch((error) => console.error("Error:", error));
     }
   }, [winner]);
 
@@ -165,10 +193,11 @@ const App: React.FC = () => {
 
 
   return (
+    <>
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
       {confettiVisible && <Confetti />}
       <div className="container grid grid-col-2 gap-2 mx-auto max-w-[80rem] p-6">
-        {!isOnRandomizeMode ? <Form randomize={randomize} participants={participants} /> :
+          {!isOnRandomizeMode ? <Form openModal={openModal} randomize={randomize} participants={participants} fetchParticipants={fetchParticipants} /> :
           <RandomizerForm
             isRandomizing={isRandomizing}
             animateName={animateName}
@@ -179,6 +208,14 @@ const App: React.FC = () => {
 
       </div>
     </div>
+      <WinnersModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        participants={participants}
+        removeParticipant={removeParticipant}
+        fetchParticipants={fetchParticipants}
+      />
+    </>
   );
 };
 
